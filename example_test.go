@@ -1,3 +1,7 @@
+// Copyright ©2016 The tilegram Authors. All rights reserved.
+// Use of this source code is governed by a MIT-style
+// license that can be found in the LICENSE file.
+
 package tilegram
 
 import (
@@ -17,6 +21,8 @@ import (
 
 // This example creates a hexagonal tilegram from census block-group
 // level population data for the US state of Washington.
+// The output from this example can be seen at:
+// https://github.com/ctessum/tilegram/blob/master/testdata/hex_golden.png
 func Example() {
 	// Open the shapefile with the census data.
 	d, err := shp.NewDecoder("testdata/WA_Population_2010.shp")
