@@ -84,8 +84,8 @@ func (h *Hex) Bounds() *geom.Bounds {
 // Geom returns the geometry of the receiver when given the radius of
 // the hexagon.
 func (h *Hex) Geom() geom.Polygon {
-	g := make([][]geom.Point, 1)
-	g[0] = make([]geom.Point, 6)
+	g := make([]geom.Path, 1)
+	g[0] = make(geom.Path, 6)
 	for i := 0; i < 6; i++ {
 		g[0][i] = geom.Point{
 			X: h.Point.X + h.r*math.Cos(math.Pi*2/6*float64(i)),
