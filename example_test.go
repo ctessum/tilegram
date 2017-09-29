@@ -14,10 +14,25 @@ import (
 	"github.com/ctessum/geom/carto"
 	"github.com/ctessum/geom/encoding/shp"
 	"github.com/ctessum/tilegram/internal/cmpimg"
-	"github.com/gonum/plot/vg"
-	"github.com/gonum/plot/vg/draw"
-	"github.com/gonum/plot/vg/vgimg"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/palette"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/draw"
+	"gonum.org/v1/plot/vg/vgimg"
 )
+
+type censusData struct {
+	geom.Polygon         // This is the geometry of the census block group.
+	Population   float64 // This is the population in the block group.
+	County       string  // This is the name of the county it is in.
+}
+
+type censusDensity []censusData
+
+func (c censusDensity) Len() int                     { return len(c) }
+func (c censusDensity) Polygon(i int) geom.Polygonal { return c[i].Polygon }
+func (c censusDensity) Density(i int) float64        { return c[i].Population / c[i].Polygon.Area() }
 
 // This example creates a hexagonal tilegram from census block-group
 // level population data for the US state of Washington.
@@ -31,13 +46,8 @@ func Example() {
 	}
 	defer d.Close()
 
-	type censusData struct {
-		geom.Polygonal         // This is the geometry of the census block group.
-		Population     float64 // This is the population in the block group.
-		County         string  // This is the name of the county it is in.
-	}
-	var records []Grouper
-	var blckgrps []geom.Polygonal // This will hold the census block group geometry.
+	var data censusDensity
+	var blckgrps []geom.Polygon // This will hold the census block group geometry.
 	var population []float64
 	// Read in the census data.
 	for {
@@ -45,29 +55,42 @@ func Example() {
 		if more := d.DecodeRow(&rec); !more {
 			break
 		}
-		records = append(records, NewData(rec, rec.Population, rec.County))
+		data = append(data, rec)
 		population = append(population, rec.Population)
-		blckgrps = append(blckgrps, rec.Polygonal)
+		blckgrps = append(blckgrps, rec.Polygon)
 	}
-	if err := d.Error(); err != nil {
+	if err = d.Error(); err != nil {
 		log.Panic(err)
 	}
 
-	// Create two new Hexagrams with our census data.
 	const (
-		r          = 20000.0 // This is the hexagon radius in meters.
-		rangeRatio = 1.3     // This is the acceptable level of variability in population.
+		margin = 0 //100000.0 // meters
+		rows   = 512
+		cols   = 1024
 	)
-	h1, err := NewHexagram(records, r)
+	cartogram := NewCartogram(data, margin, rows, cols)
+	blckgrps2 := cartogram.TransformPolygons(blckgrps)
+
+	h := plotter.NewHeatMap(cartogram, palette.Heat(12, 1))
+	plt, err := plot.New()
 	if err != nil {
+		log.Panic(err)
+	}
+	plt.Add(h)
+	if err = plt.Save(3*vg.Inch, 2*vg.Inch, "density.png"); err != nil {
 		log.Panic(err)
 	}
 
-	h2, err := NewHexagram(records, r)
+	var records []Grouper
+	for i, b := range blckgrps2 {
+		records = append(records, NewData(b, data[i].Population, data[i].County))
+	}
+
+	const r = 20000.0 // This is the hexagon radius in meters.
+	hex, err := NewHexagram(records, r)
 	if err != nil {
 		log.Panic(err)
 	}
-	h2.Distribute(rangeRatio) // We only allocate the population in one tilegram.
 
 	// Make plots of the results.
 	// Everything below here is unrelated to the creation
@@ -95,16 +118,25 @@ func Example() {
 	cmap := carto.NewColorMap(carto.Linear)
 	cmap.AddArray(population)
 	panelA := tiles.At(dc, 0, 0)
+	panelB := tiles.At(dc, 1, 0)
 	cmap.Set()
 	lc := tiles.At(legendc, 0, 0)
 	cmap.Legend(&lc, "Population")
-	b := h1.Bounds()
+	b := hex.Bounds()
 	m := carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelA)
 	for i, rec := range records {
 		color := cmap.GetColor(rec.Weight())
 		lineStyle.Color = color
 		m.DrawVector(blckgrps[i], color, lineStyle, draw.GlyphStyle{})
 	}
+
+	m2 := carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelB)
+	for i, blckgrp := range blckgrps2 {
+		color := cmap.GetColor(data[i].Population)
+		lineStyle.Color = color
+		m2.DrawVector(blckgrp, color, lineStyle, draw.GlyphStyle{})
+	}
+
 	// Now, draw the county boundaries.
 	d2, err := shp.NewDecoder("testdata/WA_Counties_2010.shp")
 	if err != nil {
@@ -113,47 +145,55 @@ func Example() {
 	defer d2.Close()
 
 	type countyData struct {
-		geom.Polygonal
+		geom.Polygon
 	}
+	var counties []geom.Polygon
 	for {
 		var rec countyData
 		if more := d2.DecodeRow(&rec); !more {
 			break
 		}
-		m.DrawVector(rec.Polygonal, color.NRGBA{}, draw.LineStyle{
+		counties = append(counties, rec.Polygon)
+		m.DrawVector(rec.Polygon, color.NRGBA{}, draw.LineStyle{
 			Width: 0.25 * vg.Millimeter,
 			Color: color.Black,
 		}, draw.GlyphStyle{})
 	}
-	if err := d2.Error(); err != nil {
+	if err = d2.Error(); err != nil {
 		log.Panic(err)
 	}
 
+	counties2 := cartogram.TransformPolygons(counties)
+	for _, c := range counties2 {
+		m2.DrawVector(c, color.NRGBA{}, draw.LineStyle{
+			Width: 0.25 * vg.Millimeter,
+			Color: color.Black,
+		}, draw.GlyphStyle{})
+	}
+
 	// Next, make a maps of our tilegrams.
-	for i, h := range []*Hexagram{h1, h2} {
-		weights := make([]float64, h.Len())
-		for i := 0; i < h.Len(); i++ {
-			weights[i] = h.Weight(i)
-		}
-		cmap = carto.NewColorMap(carto.Linear)
-		cmap.AddArray(weights)
-		panelB := tiles.At(dc, i+1, 0)
-		cmap.Set()
-		lc = tiles.At(legendc, i+1, 0)
-		cmap.Legend(&lc, "Population")
-		m = carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelB)
-		for _, hex := range h.Hexes() {
-			c := cmap.GetColor(hex.Weight())
-			lineStyle.Color = c
-			m.DrawVector(hex.Geom(), c, lineStyle, draw.GlyphStyle{})
-		}
-		// Now we add our county boundaries.
-		for _, g := range h.GroupGeom(r / 2) {
-			m.DrawVector(g, color.NRGBA{}, draw.LineStyle{
-				Width: 0.25 * vg.Millimeter,
-				Color: color.Black,
-			}, draw.GlyphStyle{})
-		}
+	weights := make([]float64, hex.Len())
+	for i := 0; i < hex.Len(); i++ {
+		weights[i] = hex.Weight(i)
+	}
+	cmap = carto.NewColorMap(carto.Linear)
+	cmap.AddArray(weights)
+	panelC := tiles.At(dc, 2, 0)
+	cmap.Set()
+	lc = tiles.At(legendc, 2, 0)
+	cmap.Legend(&lc, "Population")
+	m = carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelC)
+	for _, hex := range hex.Hexes() {
+		c := cmap.GetColor(hex.Weight())
+		lineStyle.Color = c
+		m.DrawVector(hex.Geom(), c, lineStyle, draw.GlyphStyle{})
+	}
+	// Now we add our county boundaries.
+	for _, g := range hex.GroupGeom(r / 2) {
+		m.DrawVector(g, color.NRGBA{}, draw.LineStyle{
+			Width: 0.25 * vg.Millimeter,
+			Color: color.Black,
+		}, draw.GlyphStyle{})
 	}
 
 	// Save the file
