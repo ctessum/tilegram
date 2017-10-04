@@ -14,6 +14,8 @@ import (
 	"github.com/ctessum/geom/carto"
 	"github.com/ctessum/geom/encoding/shp"
 	"github.com/ctessum/tilegram/internal/cmpimg"
+	"github.com/gonum/floats"
+	"gonum.org/v1/gonum/stat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/palette"
 	"gonum.org/v1/plot/plotter"
@@ -131,9 +133,23 @@ func Example() {
 		m.DrawVector(blckgrps[i], color, lineStyle, draw.GlyphStyle{})
 	}
 
+	cartoPopDensity := make([]float64, len(blckgrps2))
+	for i, g := range blckgrps2 {
+		cartoPopDensity[i] = population[i] / g.Area() * 1e6
+	}
+	avg := stat.Mean(cartoPopDensity, nil)
+	floats.AddConst(-avg, cartoPopDensity)
+	floats.Scale(1/avg, cartoPopDensity)
+	cmap2 := carto.NewColorMap(carto.LinCutoff)
+	cmap2.AddArray(cartoPopDensity)
+	cmap2.NumDivisions = 7
+	cmap2.Set()
+	lc2 := tiles.At(legendc, 1, 0)
+	cmap2.Legend(&lc2, "(Population/km² - mean) / mean")
+
 	m2 := carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelB)
 	for i, blckgrp := range blckgrps2 {
-		color := cmap.GetColor(data[i].Population)
+		color := cmap2.GetColor(cartoPopDensity[i])
 		lineStyle.Color = color
 		m2.DrawVector(blckgrp, color, lineStyle, draw.GlyphStyle{})
 	}
