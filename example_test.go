@@ -66,12 +66,12 @@ func Example() {
 	}
 
 	const (
-		margin = 0 //100000.0 // meters
-		rows   = 256
-		cols   = 512
+		margin = 500000.0 // meters
+		rows   = 512      //256
+		cols   = 1024     //512
 	)
 	cartogram := NewCartogram(data, margin, rows, cols)
-	cartogram.Blur = 1
+	cartogram.Blur = 3
 	blckgrps2 := cartogram.TransformPolygons(blckgrps)
 
 	h := plotter.NewHeatMap(cartogram, palette.Heat(12, 1))
@@ -86,7 +86,11 @@ func Example() {
 
 	var records []Grouper
 	for i, b := range blckgrps2 {
-		records = append(records, NewData(b, data[i].Population, data[i].County))
+		records = append(records, &Data{
+			Polygonal: b,
+			W:         data[i].Population,
+			G:         data[i].County,
+		})
 	}
 
 	const r = 20000.0 // This is the hexagon radius in meters.
@@ -193,15 +197,19 @@ func Example() {
 	for i := 0; i < hex.Len(); i++ {
 		weights[i] = hex.Weight(i)
 	}
+	avg = stat.Mean(weights, nil)
+	floats.AddConst(-avg, weights)
+	floats.Scale(1/avg, weights)
+
 	cmap = carto.NewColorMap(carto.Linear)
 	cmap.AddArray(weights)
 	panelC := tiles.At(dc, 2, 0)
 	cmap.Set()
 	lc = tiles.At(legendc, 2, 0)
-	cmap.Legend(&lc, "Population")
+	cmap.Legend(&lc, "(Population-mean)/mean")
 	m = carto.NewCanvas(b.Max.Y, b.Min.Y, b.Max.X, b.Min.X, panelC)
-	for _, hex := range hex.Hexes() {
-		c := cmap.GetColor(hex.Weight())
+	for i, hex := range hex.Hexes() {
+		c := cmap.GetColor(weights[i])
 		lineStyle.Color = c
 		m.DrawVector(hex.Geom(), c, lineStyle, draw.GlyphStyle{})
 	}

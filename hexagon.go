@@ -149,12 +149,19 @@ func NewHexagram(data []Grouper, r float64) (*Hexagram, error) {
 }
 
 // add adds a new data item to the tilegram, allocating it to the
-// nearest hexagonal tile. It returns the index of the tile that
-// the data was added to.
-func (h *Hexagram) add(d Grouper) (i int) {
-	tile := h.index.NearestNeighbor(d.Centroid()).(*Hex)
-	tile.Data = append(tile.Data, d)
-	return tile.i
+// hexagonal tiles using area weighting.
+func (h *Hexagram) add(d Grouper) {
+	for _, tileI := range h.index.SearchIntersect(d.Bounds()) {
+		tile := tileI.(*Hex)
+		iSect := tile.Geom().Intersection(d)
+		if a := iSect.Area(); a != 0 {
+			tile.Data = append(tile.Data, &Data{
+				Polygonal: iSect,
+				W:         d.Weight() * a / d.Area(),
+				G:         d.Group(),
+			})
+		}
+	}
 }
 
 // Len returns the number of tiles in the receiver.
@@ -191,33 +198,4 @@ func (h *Hexagram) GroupGeom(tolerance float64) map[string]geom.Polygon {
 		o[g] = newHull(tolerance, p...)
 	}
 	return o
-}
-
-func (h *Hexagram) neighbors(hh *Hex) []*Hex {
-	b := hh.Bounds()
-	b.Max.X += hh.r / 2
-	b.Max.Y += hh.r / 2
-	b.Min.X -= hh.r / 2
-	b.Min.Y -= hh.r / 2
-	temp := h.index.SearchIntersect(b)
-	o := make([]*Hex, len(temp))
-	for i, t := range temp {
-		o[i] = t.(*Hex)
-	}
-	return o
-}
-
-// rangeRatio returns the range in total weights among Hexagrams
-// divided by their mean.
-func (h *Hexagram) rangeRatio() (ratio, mean float64) {
-	var max = math.Inf(-1)
-	var min = math.Inf(1)
-	for _, hh := range h.hexes {
-		w := hh.Weight()
-		max = math.Max(w, max)
-		min = math.Min(w, min)
-		mean += w
-	}
-	mean /= float64(h.Len())
-	return (max - min) / mean, mean
 }
