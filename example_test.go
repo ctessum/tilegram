@@ -65,10 +65,11 @@ func Example() {
 
 	const (
 		margin = 0 //100000.0 // meters
-		rows   = 512
-		cols   = 1024
+		rows   = 256
+		cols   = 512
 	)
 	cartogram := NewCartogram(data, margin, rows, cols)
+	cartogram.Blur = 1
 	blckgrps2 := cartogram.TransformPolygons(blckgrps)
 
 	h := plotter.NewHeatMap(cartogram, palette.Heat(12, 1))

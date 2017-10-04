@@ -24,6 +24,9 @@ type Cartogram struct {
 	index      *rtree.Rtree
 	b          *geom.Bounds
 	dx, dy     float64
+
+	// Blur is the radius (in pixels) for Gaussian blurring.
+	Blur float64
 }
 
 func (c *Cartogram) Dims() (cols, rows int) { return c.cols, c.rows }
@@ -138,13 +141,13 @@ func NewCartogram(shapes PolygonDensity, margin float64, rows, cols int) *Cartog
 // TransformPoint moves a point to match a cartogram.
 func (c *Cartogram) TransformPoint(p geom.Point) geom.Point {
 	x, y := c.pointToGrid(p)
-	C.cart_makecartnooptions((*C.double)(unsafe.Pointer(&x[0])), (*C.double)(unsafe.Pointer(&y[0])), C.int(1), C.int(c.cols), C.int(c.rows))
+	C.cart_makecartnooptions((*C.double)(unsafe.Pointer(&x[0])), (*C.double)(unsafe.Pointer(&y[0])), C.int(1), C.int(c.cols), C.int(c.rows), C.double(c.Blur))
 	return c.pointFromGrid(x, y)
 }
 
 func (c *Cartogram) TransformPath(p geom.Path) geom.Path {
 	x, y := c.pathToGrid(p)
-	C.cart_makecartnooptions((*C.double)(unsafe.Pointer(&x[0])), (*C.double)(unsafe.Pointer(&y[0])), C.int(len(x)), C.int(c.cols), C.int(c.rows))
+	C.cart_makecartnooptions((*C.double)(unsafe.Pointer(&x[0])), (*C.double)(unsafe.Pointer(&y[0])), C.int(len(x)), C.int(c.cols), C.int(c.rows), C.double(c.Blur))
 	return c.pathFromGrid(x, y)
 }
 

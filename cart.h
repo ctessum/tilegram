@@ -29,7 +29,7 @@ void cart_transform(double **userrho, int xsize, int ysize);
 void cart_makecart(double *pointx, double *pointy, int npoints,
 		   int xsize, int ysize, options_t *options);
 void cart_makecartnooptions(double *pointx, double *pointy, int npoints,
-       int xsize, int ysize);
+       int xsize, int ysize, double blur);
 void cart_setrho(double **userrho, int x, int y, double rho);
 
 #endif

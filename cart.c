@@ -533,10 +533,11 @@ void write_displacements(char *output_filename, double *gridx, double *gridy, in
 }
 
 void cart_makecartnooptions(double *pointx, double *pointy, int npoints,
-		   int xsize, int ysize)
+		   int xsize, int ysize, double blur)
 {
   options_t options = DEFAULT_OPTIONS;
   options.output_filename = "nofile";
+  options.blur = blur;
   //options.progress_mode = NONE;
   cart_makecart(pointx, pointy, npoints,xsize, ysize, &options);
 }
